@@ -3,6 +3,7 @@ import urllib.error
 import xml.etree.ElementTree as ET
 import json
 import os
+from feishu import feishu
 
 
 class RssMonitor:
@@ -229,6 +230,25 @@ if __name__ == "__main__":
             print(f"  新条目 {i}:")
             print(f"    标题: {post['title']}")
             print(f"    链接: {post['link']}")
+        # 推送到飞书
+        # 构建飞书富文本内容
+        post_content_elements = []
+
+        # 添加第一行文本
+        post_content_elements.append([{"tag": "text", "text": "🚀 论坛更新"}])
+
+        # 为每个新帖子添加内容
+        for post in new_posts_again:
+            title_element = [{"tag": "text", "text": f"标题: {post['title']}"}]
+            link_element = [
+                {"tag": "text", "text": "链接: "},
+                {"tag": "a", "text": post["link"], "href": post["link"]},
+            ]
+            post_content_elements.append(title_element)
+            post_content_elements.append(link_element)
+            post_content_elements.append([{"tag": "text", "text": ""}])  # 空行作为分隔
+
+        feishu("🚀 论坛更新", post_content_elements)
     else:
         print("\n再次检查时没有发现新内容。")
 
