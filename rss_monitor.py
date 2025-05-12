@@ -203,7 +203,7 @@ if __name__ == "__main__":
     monitor = RssMonitor(local_storage_path=storage_dir)
 
     # 3. 指定 RSS 订阅 URL
-    linuxdo_welfare_rss = "https://linux.do/c/welfare/36.rss"
+    linuxdo_welfare_rss = "https://linux.do/latest.rss"
 
     # 测试用的其他 RSS 源 (Atom 格式)
     # example_atom_feed = "https://www.ruanyifeng.com/blog/atom.xml"
