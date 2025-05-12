@@ -217,19 +217,6 @@ if __name__ == "__main__":
             print(f"  新条目 {i}:")
             print(f"    标题: {post['title']}")
             print(f"    链接: {post['link']}")
-    else:
-        print("\n在此次检查中，没有发现新内容，或者所有内容都是已知的。")
-
-    print(f"\n--- 模拟一段时间后再次运行检查 '{linuxdo_welfare_rss}' ---")
-    # 再次调用 get_new_items。如果 RSS 源没有更新，这里应该不会输出新内容。
-    new_posts_again = monitor.get_new_items(rss_url=linuxdo_welfare_rss)
-
-    if new_posts_again:
-        print("\n再次检查时发现以下新内容:")
-        for i, post in enumerate(new_posts_again, 1):
-            print(f"  新条目 {i}:")
-            print(f"    标题: {post['title']}")
-            print(f"    链接: {post['link']}")
         # 推送到飞书
         # 构建飞书富文本内容
         post_content_elements = []
@@ -238,7 +225,7 @@ if __name__ == "__main__":
         post_content_elements.append([{"tag": "text", "text": "🚀 论坛更新"}])
 
         # 为每个新帖子添加内容
-        for post in new_posts_again:
+        for post in new_posts:
             title_element = [{"tag": "text", "text": f"标题: {post['title']}"}]
             link_element = [
                 {"tag": "text", "text": "链接: "},
@@ -250,8 +237,4 @@ if __name__ == "__main__":
 
         feishu("🚀 论坛更新", post_content_elements)
     else:
-        print("\n再次检查时没有发现新内容。")
-
-    print(f"\n脚本执行完毕。RSS 数据存储在: {os.path.abspath(monitor.data_file_path)}")
-    print("您可以再次运行此脚本以检查是否有更新。")
-    print("要重置并视所有条目为新条目，请删除上述路径中的 .json 文件。")
+        print("\n在此次检查中，没有发现新内容，或者所有内容都是已知的。")
