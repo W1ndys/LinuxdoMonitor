@@ -233,7 +233,9 @@ if __name__ == "__main__":
             ]
             post_content_elements.append(title_element)
             post_content_elements.append(link_element)
-            post_content_elements.append([{"tag": "text", "text": ""}])  # 空行作为分隔
+            post_content_elements.append(
+                [{"tag": "text", "text": "-----------------------"}]
+            )  # 分隔
 
         feishu("🚀 论坛更新", post_content_elements)
     else:
