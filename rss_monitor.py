@@ -3,11 +3,6 @@ import json
 import os
 from feishu import feishu
 import requests
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-import time
 
 
 class RssMonitor:
@@ -33,7 +28,7 @@ class RssMonitor:
 
     def _fetch_and_parse_rss(self, rss_url: str) -> list[dict]:
         """
-        从给定的 URL 获取 RSS 订阅内容并解析。使用Selenium模拟浏览器行为。
+        从给定的 URL 获取 RSS 订阅内容并解析。
 
         参数:
             rss_url (str): RSS 订阅源的 URL。
@@ -43,42 +38,42 @@ class RssMonitor:
                         如果获取或解析失败，则返回空列表。
         """
         items = []
-        driver = None
         try:
-            # 配置Chrome选项
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")  # 无头模式
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--window-size=1920,1080")
+            # 添加必要的请求头以模拟浏览器请求
+            headers = {
+                "host": "linux.do",
+                "cache-control": "max-age=0",
+                "sec-ch-ua": '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="99"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Windows"',
+                "upgrade-insecure-requests": "1",
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
+                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "sec-fetch-site": "none",
+                "sec-fetch-mode": "navigate",
+                "sec-fetch-user": "?1",
+                "sec-fetch-dest": "document",
+                "accept-encoding": "gzip, deflate, br, zstd",
+                "accept-language": "zh-CN,zh;q=0.9",
+                "priority": "u=0, i",
+                "referer": "https://linux.do/",
+            }
 
-            # 设置用户代理
-            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0"
-            chrome_options.add_argument(f"user-agent={user_agent}")
+            # 使用session并禁用证书验证
+            session = requests.Session()
+            session.verify = False
 
-            # 初始化WebDriver
-            driver = webdriver.Chrome(
-                service=Service(ChromeDriverManager().install()), options=chrome_options
-            )
+            # 首先访问主页，可能有助于获取必要的cookie
+            session.get("https://linux.do/", headers=headers)
 
-            # 设置页面加载超时
-            driver.set_page_load_timeout(30)
+            # 然后获取RSS内容
+            response = session.get(rss_url, headers=headers)
+            if response.status_code != 200:
+                print(f"请求失败，状态码: {response.status_code}")
+                return []
 
-            # 首先访问主站
-            print("访问主站获取cookies...")
-            driver.get("https://linux.do/")
-            time.sleep(2)  # 等待页面加载和可能的cookies设置
+            rss_content = response.content
 
-            # 然后访问RSS页面
-            print(f"正在访问RSS链接: {rss_url}")
-            driver.get(rss_url)
-            time.sleep(2)  # 等待页面完全加载
-
-            # 获取页面源码
-            rss_content = driver.page_source
-
-            # 解析RSS内容
             root = ET.fromstring(rss_content)
 
             # 优先查找 RSS 2.0 标准的 channel/item
@@ -130,13 +125,12 @@ class RssMonitor:
                 ):  # Edge case: item with title and guid but no link (less common)
                     items.append({"title": title, "link": "N/A", "guid": guid})
 
+        except requests.exceptions.RequestException as e:
+            print(f"获取 RSS 订阅失败 ({rss_url}): {e}")
+        except ET.ParseError as e:
+            print(f"解析 RSS XML 失败 ({rss_url}): {e}")
         except Exception as e:
-            print(f"使用Selenium获取RSS订阅时发生错误 ({rss_url}): {e}")
-        finally:
-            # 确保关闭浏览器
-            if driver:
-                driver.quit()
-
+            print(f"处理 RSS 时发生未知错误 ({rss_url}): {e}")
         return items
 
     def _load_stored_item_guids(self) -> set[str]:
