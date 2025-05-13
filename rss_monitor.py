@@ -1,9 +1,8 @@
-import urllib.request
-import urllib.error
 import xml.etree.ElementTree as ET
 import json
 import os
 from feishu import feishu
+import requests
 
 
 class RssMonitor:
@@ -40,30 +39,40 @@ class RssMonitor:
         """
         items = []
         try:
-            # 添加完整的请求头以模拟浏览器请求
+            # 添加必要的请求头以模拟浏览器请求
             headers = {
-                "authority": "linux.do",
-                "method": "GET",
-                "scheme": "https",
-                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "accept-encoding": "gzip, deflate, br, zstd",
-                "accept-language": "zh-CN,zh;q=0.9",
-                "cache-control": "no-cache",
-                "pragma": "no-cache",
-                "priority": "u=0, i",
+                "host": "linux.do",
+                "cache-control": "max-age=0",
                 "sec-ch-ua": '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="99"',
                 "sec-ch-ua-mobile": "?0",
                 "sec-ch-ua-platform": '"Windows"',
-                "sec-fetch-dest": "document",
-                "sec-fetch-mode": "navigate",
-                "sec-fetch-site": "none",
-                "sec-fetch-user": "?1",
                 "upgrade-insecure-requests": "1",
                 "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
+                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "sec-fetch-site": "none",
+                "sec-fetch-mode": "navigate",
+                "sec-fetch-user": "?1",
+                "sec-fetch-dest": "document",
+                "accept-encoding": "gzip, deflate, br, zstd",
+                "accept-language": "zh-CN,zh;q=0.9",
+                "priority": "u=0, i",
+                "referer": "https://linux.do/",
             }
-            req = urllib.request.Request(rss_url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as response:  # 10秒超时
-                rss_content = response.read()
+
+            # 使用session并禁用证书验证
+            session = requests.Session()
+            session.verify = False
+
+            # 首先访问主页，可能有助于获取必要的cookie
+            session.get("https://linux.do/", headers=headers)
+
+            # 然后获取RSS内容
+            response = session.get(rss_url, headers=headers)
+            if response.status_code != 200:
+                print(f"请求失败，状态码: {response.status_code}")
+                return []
+
+            rss_content = response.content
 
             root = ET.fromstring(rss_content)
 
@@ -116,7 +125,7 @@ class RssMonitor:
                 ):  # Edge case: item with title and guid but no link (less common)
                     items.append({"title": title, "link": "N/A", "guid": guid})
 
-        except urllib.error.URLError as e:
+        except requests.exceptions.RequestException as e:
             print(f"获取 RSS 订阅失败 ({rss_url}): {e}")
         except ET.ParseError as e:
             print(f"解析 RSS XML 失败 ({rss_url}): {e}")
@@ -220,10 +229,7 @@ if __name__ == "__main__":
     monitor = RssMonitor(local_storage_path=storage_dir)
 
     # 3. 指定 RSS 订阅 URL
-    linuxdo_welfare_rss = "https://linux.do/latest.rss"
-
-    # 测试用的其他 RSS 源 (Atom 格式)
-    # example_atom_feed = "https://www.ruanyifeng.com/blog/atom.xml"
+    linuxdo_welfare_rss = "https://linux.do/c/welfare/36.rss"
 
     print(f"--- 首次运行或检查 '{linuxdo_welfare_rss}' ---")
     new_posts = monitor.get_new_items(rss_url=linuxdo_welfare_rss)
