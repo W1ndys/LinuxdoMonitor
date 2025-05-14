@@ -242,14 +242,16 @@ class RssMonitor:
         except Exception as e:
             print(f"保存当前条目时发生未知错误: {e}")
 
-    def get_new_items(self, rss_url: str = "https://linux.do/latest.rss") -> list[dict]:
+    def get_new_items(
+        self, rss_url: str = "https://linux.do/c/welfare/36.rss"
+    ) -> list[dict]:
         """
         检查 RSS 订阅源中与先前存储的条目相比是否有新条目。
         保存当前获取的订阅条目以供下次检查。
 
         参数:
             rss_url (str, 可选): 要检查的 RSS 订阅源 URL。
-                                 默认为 "https://linux.do/latest.rss"。
+                                 默认为 "https://linux.do/c/welfare/36.rss"。
 
         返回:
             list[dict]: 新条目的列表，每个条目是一个包含 'title'、'link' 和 'pubDate' 的字典。
@@ -312,7 +314,7 @@ if __name__ == "__main__":
     monitor = RssMonitor(local_storage_path=storage_dir)
 
     # 3. 指定 RSS 订阅 URL
-    linuxdo_welfare_rss = "https://linux.do/latest.rss"
+    linuxdo_welfare_rss = "https://linux.do/c/welfare/36.rss"
 
     print(f"--- 首次运行或检查 '{linuxdo_welfare_rss}' ---")
     new_posts = monitor.get_new_items(rss_url=linuxdo_welfare_rss)
