@@ -288,8 +288,20 @@ class RssMonitor:
 
 
 if __name__ == "__main__":
-    # --- 使用示例 ---
 
+    load_dotenv()
+    cookie = os.getenv("COOKIE", "")
+    if not cookie:
+        print("COOKIE 环境变量未设置，请设置后重新运行。")
+        exit(1)
+    feishu_bot_secret = os.getenv("FEISHU_BOT_SECRET", "")
+    if not feishu_bot_secret:
+        print("FEISHU_BOT_SECRET 环境变量未设置，请设置后重新运行。")
+        exit(1)
+    feishu_bot_url = os.getenv("FEISHU_BOT_URL", "")
+    if not feishu_bot_url:
+        print("FEISHU_BOT_URL 环境变量未设置，请设置后重新运行。")
+        exit(1)
     # 1. 指定一个本地目录来存储 RSS 数据
     #    请确保这个目录是可写的。
     #    脚本会在当前工作目录下创建一个名为 'rss_monitor_data' 的子目录。
