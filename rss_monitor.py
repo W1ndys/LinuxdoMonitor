@@ -83,16 +83,20 @@ class RssMonitor:
                 print(f"请求失败，状态码: {response.status_code}")
                 print(f"响应内容: {response.text[:300]}...")
                 feishu(
-                    "🚀 论坛更新",
+                    "❌ 论坛更新失败",
                     [
-                        {
-                            "tag": "text",
-                            "text": f"请求失败，状态码: {response.status_code}",
-                        },
-                        {
-                            "tag": "text",
-                            "text": f"响应内容: {response.text[:300]}...",
-                        },
+                        [
+                            {
+                                "tag": "text",
+                                "text": f"⚠️ 请求失败，状态码: {response.status_code}",
+                            },
+                        ],
+                        [
+                            {
+                                "tag": "text",
+                                "text": f"📄 响应内容: {response.text[:300]}...",
+                            },
+                        ],
                     ],
                 )
                 return []
