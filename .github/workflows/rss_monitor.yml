@@ -28,6 +28,10 @@ jobs:
 
       - name: 运行RSS监控脚本
         run: python rss_monitor.py
+        env:
+          COOKIE: ${{ secrets.COOKIE }}
+          FEISHU_BOT_SECRET: ${{ secrets.FEISHU_BOT_SECRET }}
+          FEISHU_BOT_URL: ${{ secrets.FEISHU_BOT_URL }}
 
       - name: 提交并推送更改
         run: |
