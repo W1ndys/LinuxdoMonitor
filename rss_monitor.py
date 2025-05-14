@@ -81,7 +81,20 @@ class RssMonitor:
 
             if response.status_code != 200:
                 print(f"请求失败，状态码: {response.status_code}")
-                print(f"响应内容: {response.text[:200]}...")
+                print(f"响应内容: {response.text[:300]}...")
+                feishu(
+                    "🚀 论坛更新",
+                    [
+                        {
+                            "tag": "text",
+                            "text": f"请求失败，状态码: {response.status_code}",
+                        },
+                        {
+                            "tag": "text",
+                            "text": f"响应内容: {response.text[:300]}...",
+                        },
+                    ],
+                )
                 return []
 
             content_str = response.text
