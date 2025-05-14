@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 import json
 import os
+import email.utils
 from feishu import feishu
 import urllib3
 from dotenv import load_dotenv
@@ -176,6 +177,47 @@ class RssMonitor:
                         pub_date = pub_date_element.text.strip()
                     elif published_element is not None and published_element.text:
                         pub_date = published_element.text.strip()
+
+                    # 发布时间转化为标准东八区时间，例如发布时间: Wed, 14 May 2025 11:05:36 +0000
+                    if pub_date:
+                        try:
+                            # 尝试解析不同格式的时间
+                            parsed_time = None
+                            # 尝试 RSS 格式 (RFC 822)
+                            try:
+                                parsed_time = email.utils.parsedate_to_datetime(
+                                    pub_date
+                                )
+                            except (TypeError, ValueError):
+                                pass
+
+                            # 尝试 Atom 格式 (ISO 8601)
+                            if not parsed_time:
+                                try:
+                                    parsed_time = datetime.datetime.fromisoformat(
+                                        pub_date.replace("Z", "+00:00")
+                                    )
+                                except (ValueError, AttributeError):
+                                    pass
+
+                            # 如果成功解析，转换为东八区时间
+                            if parsed_time:
+                                # 确保时间有时区信息
+                                if parsed_time.tzinfo is None:
+                                    parsed_time = parsed_time.replace(
+                                        tzinfo=datetime.timezone.utc
+                                    )
+
+                                # 转换到东八区 (UTC+8)
+                                china_timezone = datetime.timezone(
+                                    datetime.timedelta(hours=8)
+                                )
+                                china_time = parsed_time.astimezone(china_timezone)
+
+                                # 格式化时间
+                                pub_date = china_time.strftime("%Y-%m-%d %H:%M:%S")
+                        except Exception as e:
+                            print(f"时间转换错误: {e}, 原始时间: {pub_date}")
 
                     if title and link and guid:
                         items.append(
