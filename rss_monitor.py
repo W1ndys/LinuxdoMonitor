@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 import json
 import os
 from feishu import feishu
-import requests
+import urllib3
 
 
 class RssMonitor:
@@ -39,98 +39,123 @@ class RssMonitor:
         """
         items = []
         try:
-            # 添加必要的请求头以模拟浏览器请求
-            headers = {
-                "host": "linux.do",
-                "cache-control": "max-age=0",
-                "sec-ch-ua": '"Chromium";v="136", "Microsoft Edge";v="136", "Not.A/Brand";v="99"',
-                "sec-ch-ua-mobile": "?0",
-                "sec-ch-ua-platform": '"Windows"',
-                "upgrade-insecure-requests": "1",
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
-                "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "sec-fetch-site": "none",
-                "sec-fetch-mode": "navigate",
-                "sec-fetch-user": "?1",
-                "sec-fetch-dest": "document",
-                "accept-encoding": "gzip, deflate, br, zstd",
-                "accept-language": "zh-CN,zh;q=0.9",
-                "priority": "u=0, i",
-                "referer": "https://linux.do/",
-            }
+            import requests
+            import time
+            import warnings
 
-            # 使用session并禁用证书验证
+            # 忽略SSL警告
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+            # 创建会话保持连接状态
             session = requests.Session()
             session.verify = False
 
-            # 首先访问主页，可能有助于获取必要的cookie
-            session.get("https://linux.do/", headers=headers)
+            # 设置类似真实浏览器的headers
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Cache-Control": "max-age=0",
+                "Referer": "https://linux.do/",
+            }
 
-            # 然后获取RSS内容
-            response = session.get(rss_url, headers=headers)
+            # 先访问主站获取cookies
+            session.get("https://linux.do/", headers=headers, timeout=15)
+
+            # 添加短暂延迟，模拟人类行为
+            time.sleep(2)
+
+            # 请求RSS链接
+            response = session.get(rss_url, headers=headers, timeout=15)
+
             if response.status_code != 200:
                 print(f"请求失败，状态码: {response.status_code}")
+                print(f"响应内容: {response.text[:200]}...")
                 return []
 
-            rss_content = response.content
+            content_str = response.text
 
-            root = ET.fromstring(rss_content)
+            if not content_str.strip():
+                print("获取到的RSS内容为空")
+                return []
 
-            # 优先查找 RSS 2.0 标准的 channel/item
-            item_elements = root.findall(".//channel/item")
-            # 如果找不到，尝试 Atom feed 的 entry (常见于一些博客)
-            if not item_elements:
-                # Atom feeds use a different namespace, typically.
-                # For simplicity, we'll try a common path without namespace handling first.
-                # Proper Atom parsing would require namespace awareness (e.g., using ET.register_namespace)
-                item_elements = root.findall("{http://www.w3.org/2005/Atom}entry")
+            # 检查内容是否为XML
+            if not content_str.startswith("<?xml"):
+                print(f"获取到的内容可能不是有效的XML: {content_str[:100]}...")
+                # 尝试查找XML开始位置
+                xml_start = content_str.find("<?xml")
+                if xml_start > 0:
+                    content_str = content_str[xml_start:]
+                else:
+                    print("未能找到XML内容，可能是遇到了人机验证")
+                    print("正在尝试解决...")
+                    # 尝试解析HTML查找保护模式的提示
+                    if "just a moment" in content_str.lower():
+                        print("检测到Cloudflare保护或类似保护机制")
+                    return []
 
-            for item_element in item_elements:
-                title_element = item_element.find("title")
-                title = (
-                    title_element.text.strip()
-                    if title_element is not None and title_element.text
-                    else "N/A"
-                )
+            # 解析XML
+            try:
+                root = ET.fromstring(content_str)
 
-                link_element = item_element.find("link")
-                link = None
-                if link_element is not None:
-                    if (
-                        "href" in link_element.attrib
-                    ):  # Atom feeds use <link href="...">
-                        link = link_element.get("href")
-                    elif link_element.text:  # RSS <link> usually has text content
-                        link = link_element.text
+                # 优先查找 RSS 2.0 标准的 channel/item
+                item_elements = root.findall(".//channel/item")
+                # 如果找不到，尝试 Atom feed 的 entry
+                if not item_elements:
+                    item_elements = root.findall("{http://www.w3.org/2005/Atom}entry")
 
-                guid_element = item_element.find("guid")  # RSS
-                id_element = item_element.find(
-                    "{http://www.w3.org/2005/Atom}id"
-                )  # Atom
+                print(f"找到 {len(item_elements)} 个item元素")
 
-                guid = None
-                if guid_element is not None and guid_element.text:
-                    guid = guid_element.text.strip()
-                elif id_element is not None and id_element.text:  # Atom ID
-                    guid = id_element.text.strip()
+                for item_element in item_elements:
+                    title_element = item_element.find("title")
+                    title = (
+                        title_element.text.strip()
+                        if title_element is not None and title_element.text
+                        else "N/A"
+                    )
 
-                # 如果 guid 不存在，尝试使用 link 作为唯一标识符
-                if not guid and link:
-                    guid = link.strip()
+                    link_element = item_element.find("link")
+                    link = None
+                    if link_element is not None:
+                        if "href" in link_element.attrib:  # Atom feeds
+                            link = link_element.get("href")
+                        elif link_element.text:  # RSS
+                            link = link_element.text
 
-                if title and link and guid:
-                    items.append({"title": title, "link": link.strip(), "guid": guid})
-                elif (
-                    title and guid and not link
-                ):  # Edge case: item with title and guid but no link (less common)
-                    items.append({"title": title, "link": "N/A", "guid": guid})
+                    guid_element = item_element.find("guid")  # RSS
+                    id_element = item_element.find(
+                        "{http://www.w3.org/2005/Atom}id"
+                    )  # Atom
+
+                    guid = None
+                    if guid_element is not None and guid_element.text:
+                        guid = guid_element.text.strip()
+                    elif id_element is not None and id_element.text:
+                        guid = id_element.text.strip()
+
+                    # 如果 guid 不存在，使用 link 作为唯一标识符
+                    if not guid and link:
+                        guid = link.strip()
+
+                    if title and link and guid:
+                        items.append(
+                            {"title": title, "link": link.strip(), "guid": guid}
+                        )
+                    elif title and guid and not link:
+                        items.append({"title": title, "link": "N/A", "guid": guid})
+
+            except ET.ParseError as e:
+                print(f"解析 XML 失败: {e}")
+                print(f"内容片段: {content_str[:200]}")
 
         except requests.exceptions.RequestException as e:
-            print(f"获取 RSS 订阅失败 ({rss_url}): {e}")
-        except ET.ParseError as e:
-            print(f"解析 RSS XML 失败 ({rss_url}): {e}")
+            print(f"请求异常 ({rss_url}): {e}")
         except Exception as e:
             print(f"处理 RSS 时发生未知错误 ({rss_url}): {e}")
+
         return items
 
     def _load_stored_item_guids(self) -> set[str]:
