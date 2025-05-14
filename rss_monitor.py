@@ -3,6 +3,8 @@ import json
 import os
 from feishu import feishu
 import urllib3
+from dotenv import load_dotenv
+import datetime
 
 
 class RssMonitor:
@@ -18,6 +20,9 @@ class RssMonitor:
             local_storage_path (str): 用于存储 RSS 数据的本地目录路径。
                                       数据将保存在此目录下的 'rss_feed_data.json' 文件中。
         """
+        # 加载环境变量
+        load_dotenv()
+
         self.storage_path = local_storage_path
         # 确保存储目录存在
         os.makedirs(self.storage_path, exist_ok=True)
@@ -34,14 +39,13 @@ class RssMonitor:
             rss_url (str): RSS 订阅源的 URL。
 
         返回:
-            list[dict]: 包含条目信息的字典列表，每个字典包含 'title', 'link', 和 'guid'。
+            list[dict]: 包含条目信息的字典列表，每个字典包含 'title', 'link', 'guid' 和 'pubDate'。
                         如果获取或解析失败，则返回空列表。
         """
         items = []
         try:
             import requests
             import time
-            import warnings
 
             # 忽略SSL警告
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -49,6 +53,9 @@ class RssMonitor:
             # 创建会话保持连接状态
             session = requests.Session()
             session.verify = False
+
+            # 从环境变量获取Cookie
+            cookie = os.getenv("COOKIE", "")
 
             # 设置类似真实浏览器的headers
             headers = {
@@ -60,6 +67,7 @@ class RssMonitor:
                 "Upgrade-Insecure-Requests": "1",
                 "Cache-Control": "max-age=0",
                 "Referer": "https://linux.do/",
+                "Cookie": cookie,
             }
 
             # 先访问主站获取cookies
@@ -140,12 +148,36 @@ class RssMonitor:
                     if not guid and link:
                         guid = link.strip()
 
+                    # 提取发布时间
+                    pub_date_element = item_element.find("pubDate")  # RSS
+                    published_element = item_element.find(
+                        "{http://www.w3.org/2005/Atom}published"
+                    )  # Atom
+
+                    pub_date = None
+                    if pub_date_element is not None and pub_date_element.text:
+                        pub_date = pub_date_element.text.strip()
+                    elif published_element is not None and published_element.text:
+                        pub_date = published_element.text.strip()
+
                     if title and link and guid:
                         items.append(
-                            {"title": title, "link": link.strip(), "guid": guid}
+                            {
+                                "title": title,
+                                "link": link.strip(),
+                                "guid": guid,
+                                "pubDate": pub_date,
+                            }
                         )
                     elif title and guid and not link:
-                        items.append({"title": title, "link": "N/A", "guid": guid})
+                        items.append(
+                            {
+                                "title": title,
+                                "link": "N/A",
+                                "guid": guid,
+                                "pubDate": pub_date,
+                            }
+                        )
 
             except ET.ParseError as e:
                 print(f"解析 XML 失败: {e}")
@@ -197,19 +229,17 @@ class RssMonitor:
         except Exception as e:
             print(f"保存当前条目时发生未知错误: {e}")
 
-    def get_new_items(
-        self, rss_url: str = "https://linux.do/c/welfare/36.rss"
-    ) -> list[dict]:
+    def get_new_items(self, rss_url: str = "https://linux.do/latest.rss") -> list[dict]:
         """
         检查 RSS 订阅源中与先前存储的条目相比是否有新条目。
         保存当前获取的订阅条目以供下次检查。
 
         参数:
             rss_url (str, 可选): 要检查的 RSS 订阅源 URL。
-                                 默认为 "https://linux.do/c/welfare/36.rss"。
+                                 默认为 "https://linux.do/latest.rss"。
 
         返回:
-            list[dict]: 新条目的列表，每个条目是一个包含 'title' 和 'link' 的字典。
+            list[dict]: 新条目的列表，每个条目是一个包含 'title'、'link' 和 'pubDate' 的字典。
                         如果没有新条目或获取/解析失败，则返回空列表。
         """
         print(f"\n正在从 {rss_url} 获取 RSS 订阅...")
@@ -227,7 +257,10 @@ class RssMonitor:
 
         for item in current_items:
             if item.get("guid") and item["guid"] not in stored_guids:
-                new_items_info.append({"title": item["title"], "link": item["link"]})
+                new_item = {"title": item["title"], "link": item["link"]}
+                if "pubDate" in item and item["pubDate"]:
+                    new_item["pubDate"] = item["pubDate"]
+                new_items_info.append(new_item)
 
         if new_items_info:
             print(f"发现 {len(new_items_info)} 个新条目。")
@@ -254,7 +287,7 @@ if __name__ == "__main__":
     monitor = RssMonitor(local_storage_path=storage_dir)
 
     # 3. 指定 RSS 订阅 URL
-    linuxdo_welfare_rss = "https://linux.do/c/welfare/36.rss"
+    linuxdo_welfare_rss = "https://linux.do/latest.rss"
 
     print(f"--- 首次运行或检查 '{linuxdo_welfare_rss}' ---")
     new_posts = monitor.get_new_items(rss_url=linuxdo_welfare_rss)
@@ -265,12 +298,20 @@ if __name__ == "__main__":
             print(f"  新条目 {i}:")
             print(f"    标题: {post['title']}")
             print(f"    链接: {post['link']}")
+            if "pubDate" in post:
+                print(f"    发布时间: {post['pubDate']}")
+
+        # 获取当前时间
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         # 推送到飞书
         # 构建飞书富文本内容
         post_content_elements = []
 
-        # 添加第一行文本
-        post_content_elements.append([{"tag": "text", "text": "🚀 论坛更新"}])
+        # 添加第一行文本和当前时间
+        post_content_elements.append(
+            [{"tag": "text", "text": f"🚀 论坛更新 (推送时间: {current_time})"}]
+        )
 
         # 为每个新帖子添加内容
         for post in new_posts:
@@ -279,8 +320,17 @@ if __name__ == "__main__":
                 {"tag": "text", "text": "链接: "},
                 {"tag": "a", "text": post["link"], "href": post["link"]},
             ]
-            post_content_elements.append(title_element)
-            post_content_elements.append(link_element)
+
+            # 添加发布时间信息（如果有）
+            if "pubDate" in post and post["pubDate"]:
+                time_element = [{"tag": "text", "text": f"发布时间: {post['pubDate']}"}]
+                post_content_elements.append(title_element)
+                post_content_elements.append(link_element)
+                post_content_elements.append(time_element)
+            else:
+                post_content_elements.append(title_element)
+                post_content_elements.append(link_element)
+
             post_content_elements.append(
                 [{"tag": "text", "text": "-----------------------"}]
             )  # 分隔
